@@ -707,6 +707,12 @@ public class JaxRsResourceTest {
     }
 
     @Test
+    public void shouldAcceptBeanParamExtendingCollectionOptions() {
+        assertThat(get(service, "/test/acceptsBeanParamExtendingCollectionOptions?limit=3&offset=5&property=test&order=asc&sortby=name")
+            .getOutp()).isEqualTo("\"3, name, 5, ASC, test\"");
+    }
+
+    @Test
     public void shouldAcceptBeanParamInherited() {
         assertThat(get(service, "/test/acceptsBeanParamInherited?name=foo&age=3&items=1,2&inherited=YES").getOutp()).isEqualTo("\"foo - 3 2 - YES\"");
     }
@@ -1022,6 +1028,10 @@ public class JaxRsResourceTest {
         @GET
         Observable<String> acceptsBeanParam(@BeanParam ParamEntity beanParam);
 
+        @Path("acceptsBeanParamExtendingCollectionOptions")
+        @GET
+        Observable<String> acceptsBeanParamExtendingCollectionOptions(@BeanParam ApiFilter apiFilter);
+
         @Path("acceptsBeanParamInherited")
         @GET
         Observable<String> acceptsBeanParamInherited(@BeanParam InheritedParamEntity beanParam);
@@ -1315,6 +1325,16 @@ public class JaxRsResourceTest {
         @Override
         public Observable<String> acceptsBeanParamInherited(InheritedParamEntity beanParam) {
             return just(String.format("%s - %d %d - %s", beanParam.getName(), beanParam.getAge(), beanParam.getItems().size(), beanParam.getInherited()));
+        }
+
+        @Override
+        public Observable<String> acceptsBeanParamExtendingCollectionOptions(@BeanParam ApiFilter apiFilter) {
+            return just(String.format("%d, %s, %d, %s, %s",
+                apiFilter.getLimit(),
+                apiFilter.getSortBy(),
+                apiFilter.getOffset(),
+                apiFilter.getOrder(),
+                apiFilter.getProperty()));
         }
 
         @Override
