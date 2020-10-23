@@ -21,7 +21,7 @@ jobs:
         with:
           java-version: 1.8
           server-id: ossrh
-          server-username: ${{ secrets.OSSRH_USERNAME }}
+          server-username: 0idY5C00
           server-password: ${{ secrets.OSSRH_TOKEN }}
       - name: set version
         run: mvn versions:set -DnewVersion=${GITHUB_REF##*/}
