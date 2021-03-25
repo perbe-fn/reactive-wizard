@@ -23,6 +23,7 @@ import rx.Single;
 import se.fortnox.reactivewizard.jaxrs.ByteBufCollector;
 import se.fortnox.reactivewizard.jaxrs.FieldError;
 import se.fortnox.reactivewizard.jaxrs.JaxRsMeta;
+import se.fortnox.reactivewizard.jaxrs.Stream;
 import se.fortnox.reactivewizard.jaxrs.WebException;
 import se.fortnox.reactivewizard.metrics.HealthRecorder;
 import se.fortnox.reactivewizard.metrics.PublisherMetrics;
@@ -179,14 +180,29 @@ public class HttpClient implements InvocationHandler {
         Publisher<?> publisher = null;
         AtomicReference<HttpClientResponse> rawResponse = new AtomicReference<>();
         if (expectsByteArrayResponse(method)) {
-            publisher = response.flatMap(rwHttpClientResponse -> {
-                rawResponse.set(rwHttpClientResponse.getHttpClientResponse());
-                if (rwHttpClientResponse.getHttpClientResponse().status().code() >= 400) {
-                    return Mono.from(collector.collectString(rwHttpClientResponse.getContent()))
-                        .map(data -> handleError(request, rwHttpClientResponse.getHttpClientResponse(), data).getBytes());
-                }
-                return Mono.from(collector.collectBytes(rwHttpClientResponse.getContent()));
-            });
+            if (expectsStreamResponse(method)) {
+                publisher = response.flatMapMany(rwHttpClientResponse -> {
+                    rawResponse.set(rwHttpClientResponse.getHttpClientResponse());
+                    if (rwHttpClientResponse.getHttpClientResponse().status().code() >= 400) {
+                        return Mono.from(collector.collectString(rwHttpClientResponse.getContent()))
+                            .map(data -> handleError(request, rwHttpClientResponse.getHttpClientResponse(), data).getBytes());
+                    }
+                    return Flux.from(rwHttpClientResponse.getContent().map(byteBuf -> {
+                        byte[] byteArray = new byte[byteBuf.readableBytes()];
+                        byteBuf.readBytes(byteArray);
+                        return byteArray;
+                    }));
+                });
+            } else {
+                publisher = response.flatMap(rwHttpClientResponse -> {
+                    rawResponse.set(rwHttpClientResponse.getHttpClientResponse());
+                    if (rwHttpClientResponse.getHttpClientResponse().status().code() >= 400) {
+                        return Mono.from(collector.collectString(rwHttpClientResponse.getContent()))
+                            .map(data -> handleError(request, rwHttpClientResponse.getHttpClientResponse(), data).getBytes());
+                    }
+                    return Mono.from(collector.collectBytes(rwHttpClientResponse.getContent()));
+                });
+            }
         } else {
             publisher = response.flatMap(rwHttpClientResponse -> {
                 rawResponse.set(rwHttpClientResponse.getHttpClientResponse());
@@ -266,6 +282,10 @@ public class HttpClient implements InvocationHandler {
     private boolean expectsByteArrayResponse(Method method) {
         Type type = ReflectionUtil.getTypeOfObservable(method);
         return type.equals(BYTEARRAY_TYPE);
+    }
+
+    private boolean expectsStreamResponse(Method method) {
+        return method.isAnnotationPresent(Stream.class);
     }
 
     private void addDevOverrides(RequestBuilder fullRequest) {

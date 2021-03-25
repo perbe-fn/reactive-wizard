@@ -15,8 +15,17 @@ public class JaxRsStreamingResult<T> extends JaxRsResult<T> {
 
     @Override
     public Publisher<Void> write(HttpServerResponse response) {
-        response.status(responseStatus);
-        headers.forEach(response::addHeader);
-        return response.sendByteArray(output.map(serializer::call));
+        // switchOnFirst will delay sending headers until the first part of the output stream arrives
+        return output.switchOnFirst((firstValue, innerFlux) -> {
+            // From the docs:
+            // Note that the source might complete or error immediately instead of emitting, in which case the Signal would be onComplete or onError.
+            if (firstValue.isOnError()) {
+                // Dont send response status and headers here, it will be sent by the upstream exceptionhandler
+                return innerFlux.cast(Void.class);
+            }
+            response.status(responseStatus);
+            headers.forEach(response::addHeader);
+            return response.sendByteArray(innerFlux.map(serializer::call));
+        });
     }
 }
